@@ -1,0 +1,10 @@
+com\gridstorage\GridStorage.class
+com\gridstorage\model\PlayerStorage.class
+com\gridstorage\listener\GUIListener.class
+com\gridstorage\database\DatabaseManager.class
+com\gridstorage\scheduler\FoliaScheduler.class
+com\gridstorage\manager\GUIManager.class
+com\gridstorage\command\GridStorageCommand.class
+com\gridstorage\config\ConfigManager.class
+com\gridstorage\model\StorageSlot.class
+com\gridstorage\manager\StorageManager.class

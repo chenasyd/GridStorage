@@ -1,0 +1,53 @@
+# 网格存储插件主配置文件
+
+# 数据库配置
+database:
+  # 数据存储类型: sqlite(本地文件) 或 mysql(数据库)
+  type: sqlite
+
+# 网格配置
+grid:
+  # 网格名称
+  name: "网格仓库"
+  # 最大仓库槽位数量
+  max-storage-count: 100
+  # 每页显示的槽位数量
+  page-size: 45
+  # GUI大小
+  gui-size: 54
+
+# 语言配置
+language:
+  # 默认语言: zh(中文), en(英文)
+  default: "zh"
+  # 是否允许玩家切换语言
+  allow-player-switch: false
+
+# 消息配置
+messages:
+  # 是否启用消息
+  enabled: true
+  # 消息前缀
+  prefix: "&6[网格存储] &r"
+  # 消息颜色
+  colors:
+    success: "&a"
+    error: "&c"
+    info: "&e"
+    warning: "&6"
+
+# 日志配置
+logging:
+  # 是否启用日志
+  enabled: true
+  # 日志级别: DEBUG, INFO, WARN, ERROR
+  level: INFO
+  # 是否记录到文件
+  file-logging: true
+  # 日志文件路径
+  log-file: "logs/gridstorage.log"
+  # 最大日志文件大小（MB）
+  max-file-size: 10
+  # 保留的日志文件数量
+  max-files: 5
+

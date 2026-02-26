@@ -1,0 +1,44 @@
+# GridStorage English Messages File
+
+storage:
+  gui:
+    title: "&6Grid Storage &7- Page &e{0}&7/&e{1}"
+    slot-title: "&6Storage #{0}"
+    slot-lore:
+      - "&7Click to open this storage"
+      - "&7Capacity: 54 slots"
+    buttons:
+      prev-page: "&aPrevious Page"
+      next-page: "&aNext Page"
+      prev-lore:
+        - "&7Click to go to previous page"
+      next-lore:
+        - "&7Click to go to next page"
+    first-page: "&cAlready on the first page"
+    last-page: "&cAlready on the last page"
+  messages:
+    invalid-slot: "&cInvalid slot number!"
+    open-storage: "&aStorage system opened"
+    open-slot: "&aOpened storage #{0}"
+    slot-saved: "&aStorage #{0} saved"
+    all-saved: "&aAll storage data saved"
+
+prefix: "&6[Grid Storage] &r"
+
+commands:
+  help:
+    header: "&6========== Grid Storage System =========="
+    main: "&e/gridstorage &7- Open storage"
+    open-slot: "&e/gridstorage open [slot] &7- Open specific slot"
+    help: "&e/gridstorage help &7- Show help information"
+    reload: "&e/gridstorage reload &7- Reload configuration (Admin)"
+    admin-reload: "&e/gridstorageadmin reload &7- Reload configuration"
+    admin-help: "&e/gridstorageadmin help &7- Show admin help"
+    footer: "&6=================================="
+  messages:
+    config-reloaded: "&aConfiguration reloaded!"
+    no-permission: "&cYou don't have permission to execute this command!"
+    player-only: "&cThis command can only be executed by players!"
+
+messages:
+  nbt-init-failed: "&cNBT-API initialization failed, plugin disabled"

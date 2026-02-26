@@ -1,0 +1,45 @@
+# GridStorage 中文消息文件
+
+storage:
+  gui:
+    title: "&6网格仓库 &7- 第 &e{0}&7/&e{1} &7页"
+    slot-title: "&6仓库 #{0}"
+    slot-lore:
+      - "&7点击打开此仓库"
+      - "&7容量: 54 格"
+    buttons:
+      prev-page: "&a前一页"
+      next-page: "&a后一页"
+      prev-lore:
+        - "&7点击返回上一页"
+      next-lore:
+        - "&7点击前往下一页"
+    first-page: "&c已经是第一页了"
+    last-page: "&c已经是最后一页了"
+  messages:
+    invalid-slot: "&c无效的槽位编号！"
+    open-storage: "&a已打开仓库系统"
+    open-slot: "&a已打开仓库 #{0}"
+    slot-saved: "&a仓库 #{0} 已保存"
+    all-saved: "&a所有仓库数据已保存"
+
+prefix: "&6[网格存储] &r"
+
+commands:
+  help:
+    header: "&6========== 网格存储系统 =========="
+    main: "&e/gridstorage &7- 打开仓库"
+    open-slot: "&e/gridstorage open [槽位号] &7- 打开指定槽位"
+    help: "&e/gridstorage help &7- 显示帮助信息"
+    reload: "&e/gridstorage reload &7- 重新加载配置 (管理员)"
+    admin-reload: "&e/gridstorageadmin reload &7- 重新加载配置"
+    admin-help: "&e/gridstorageadmin help &7- 显示帮助信息"
+    footer: "&6=================================="
+  messages:
+    config-reloaded: "&a配置已重新加载！"
+    no-permission: "&c你没有权限执行此命令！"
+    player-only: "&c此命令只能由玩家执行！"
+
+messages:
+  nbt-init-failed: "&cNBT-API 初始化失败，插件禁用"
+
