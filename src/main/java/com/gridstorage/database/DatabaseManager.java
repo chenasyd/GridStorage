@@ -65,7 +65,7 @@ public class DatabaseManager {
             Class.forName("org.sqlite.JDBC");
 
             // 创建数据库连接（仅用于初始化）
-            plugin.getLogger().info("正在连接SQLite数据库: " + databaseFile.getAbsolutePath());
+            plugin.getPluginLogger().info("正在连接SQLite数据库: " + databaseFile.getAbsolutePath());
             try (Connection conn = getConnection()) {
                 // 启用WAL模式和优化设置
                 try (Statement stmt = conn.createStatement()) {
@@ -80,13 +80,11 @@ public class DatabaseManager {
                 createTables(conn);
             }
 
-            plugin.getLogger().info("SQLite数据库初始化成功");
+            plugin.getPluginLogger().info("SQLite数据库初始化成功");
         } catch (ClassNotFoundException e) {
-            plugin.getLogger().severe("SQLite驱动未找到！请确保依赖正确配置。");
-            e.printStackTrace();
+            plugin.getPluginLogger().error("SQLite驱动未找到！请确保依赖正确配置。", e);
         } catch (SQLException e) {
-            plugin.getLogger().severe("SQLite数据库初始化失败: " + e.getMessage());
-            e.printStackTrace();
+            plugin.getPluginLogger().error("SQLite数据库初始化失败: " + e.getMessage(), e);
         }
     }
 
@@ -125,8 +123,8 @@ public class DatabaseManager {
             // 创建索引
             stmt.execute("CREATE INDEX IF NOT EXISTS idx_slots_player_uuid ON storage_slots(player_uuid)");
             stmt.execute("CREATE INDEX IF NOT EXISTS idx_slots_slot_id ON storage_slots(slot_id)");
-            
-            plugin.getLogger().info("数据库表结构创建成功");
+
+            plugin.getPluginLogger().info("数据库表结构创建成功");
         }
     }
 
@@ -175,11 +173,11 @@ public class DatabaseManager {
                 // 加载槽位数据
                 loadSlotsFromDatabase(storage);
                 
-                plugin.getLogger().info("从数据库加载玩家数据: " + playerName + " (" + uuid + ")");
+                plugin.getPluginLogger().info("从数据库加载玩家数据: " + playerName + " (" + uuid + ")");
                 return storage;
             }
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING, "加载玩家存储失败: " + uuid, e);
+            plugin.getPluginLogger().warning("加载玩家存储失败: " + uuid + ": " + e.getMessage());
         }
         
         return null;
@@ -203,7 +201,7 @@ public class DatabaseManager {
                 int slotId = rs.getInt("slot_id");
                 String nbtData = rs.getString("nbt_data");
 
-                plugin.getLogger().info("从数据库加载槽位 #" + slotId + "，NBT数据长度: " + (nbtData != null ? nbtData.length() : 0));
+                plugin.getPluginLogger().debug("从数据库加载槽位 #" + slotId + "，NBT数据长度: " + (nbtData != null ? nbtData.length() : 0));
 
                 StorageSlot slot = storage.getSlot(slotId);
                 if (slot != null) {
@@ -223,12 +221,12 @@ public class DatabaseManager {
             }
 
             if (loadedSlotCount > 0) {
-                plugin.getLogger().info("加载槽位数据: " + loadedSlotCount + " 个槽位, " + totalItems + " 个物品");
+                plugin.getPluginLogger().info("加载槽位数据: " + loadedSlotCount + " 个槽位, " + totalItems + " 个物品");
             } else {
-                plugin.getLogger().info("未加载到任何槽位数据");
+                plugin.getPluginLogger().info("未加载到任何槽位数据");
             }
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING, "加载槽位数据失败", e);
+            plugin.getPluginLogger().warning("加载槽位数据失败: " + e.getMessage());
         }
     }
 
@@ -330,13 +328,13 @@ public class DatabaseManager {
                     conn.rollback(); // 没有需要保存的数据，回滚
                 }
 
-                plugin.getLogger().info("保存槽位数据: " + savedSlotCount + " 个槽位, " + totalItems + " 个物品");
+                plugin.getPluginLogger().info("保存槽位数据: " + savedSlotCount + " 个槽位, " + totalItems + " 个物品");
             } catch (SQLException e) {
                 // 回滚事务
                 try {
                     conn.rollback();
                 } catch (SQLException rollbackEx) {
-                    plugin.getLogger().log(Level.WARNING, "回滚事务失败", rollbackEx);
+                    plugin.getPluginLogger().warning("回滚事务失败: " + rollbackEx.getMessage());
                 }
                 throw e;
             }
@@ -345,7 +343,7 @@ public class DatabaseManager {
             try {
                 conn.setAutoCommit(autoCommit);
             } catch (SQLException e) {
-                plugin.getLogger().log(Level.WARNING, "恢复 auto-commit 模式失败", e);
+                plugin.getPluginLogger().warning("恢复 auto-commit 模式失败: " + e.getMessage());
             }
         }
     }
@@ -375,18 +373,17 @@ public class DatabaseManager {
                     compound.getOrCreateCompound("slot_" + i).mergeCompound(itemNbt);
 
                     itemCount++;
-                    plugin.getLogger().info("序列化槽位 " + i + " 的物品: " + item.getType()
+                    plugin.getPluginLogger().debug("序列化槽位 " + i + " 的物品: " + item.getType()
                             + ", NBT: " + itemNbt.toString());
                 } catch (Exception e) {
-                    plugin.getLogger().warning("序列化槽位 " + i + " 失败: " + e.getMessage());
-                    e.printStackTrace();
+                    plugin.getPluginLogger().warning("序列化槽位 " + i + " 失败: " + e.getMessage());
                 }
             }
         }
 
         compound.setString("size", String.valueOf(items.length));
         String result = compound.toString();
-        plugin.getLogger().info("序列化完成，总物品数: " + itemCount + ", NBT结果: " + result);
+        plugin.getPluginLogger().debug("序列化完成，总物品数: " + itemCount);
         return result;
     }
 
@@ -395,15 +392,15 @@ public class DatabaseManager {
         int itemCount = 0;
 
         if (nbtData == null || nbtData.isEmpty() || nbtData.equals("{}")) {
-            plugin.getLogger().fine("NBT数据为空，返回空数组");
+            plugin.getPluginLogger().debug("NBT数据为空，返回空数组");
             return items;
         }
 
         try {
-            plugin.getLogger().info("开始反序列化NBT数据: " + nbtData);
+            plugin.getPluginLogger().debug("开始反序列化NBT数据，长度: " + nbtData.length());
             de.tr7zw.nbtapi.NBTContainer compound = new de.tr7zw.nbtapi.NBTContainer(nbtData);
 
-            plugin.getLogger().info("NBTContainer创建成功，size=" + compound.getString("size"));
+            plugin.getPluginLogger().debug("NBTContainer创建成功，size=" + compound.getString("size"));
 
             for (int i = 0; i < 54; i++) {
                 String slotKey = "slot_" + i;
@@ -416,19 +413,19 @@ public class DatabaseManager {
                             if (stack != null && stack.getType() != Material.AIR) {
                                 items[i] = stack;
                                 itemCount++;
-                                plugin.getLogger().info("成功恢复槽位 " + i + " 的物品: " + stack.getType());
+                                plugin.getPluginLogger().debug("成功恢复槽位 " + i + " 的物品: " + stack.getType());
                             }
                         } catch (Exception e) {
-                            plugin.getLogger().log(Level.WARNING,
+                            plugin.getPluginLogger().warning(
                                     "解析槽位 " + i + " 的物品数据失败，跳过: " + e.getMessage());
                         }
                     }
                 }
             }
 
-            plugin.getLogger().info("NBT解析完成，共 " + itemCount + " 个物品");
+            plugin.getPluginLogger().info("NBT解析完成，共 " + itemCount + " 个物品");
         } catch (Exception e) {
-            plugin.getLogger().log(Level.SEVERE, "解析物品NBT数据失败: " + e.getMessage(), e);
+            plugin.getPluginLogger().error("解析物品NBT数据失败: " + e.getMessage(), e);
         }
 
         return items;
@@ -440,7 +437,7 @@ public class DatabaseManager {
             savePlayerStorage(uuid);
             count++;
         }
-        plugin.getLogger().info("已保存 " + count + " 个玩家的数据");
+        plugin.getPluginLogger().info("已保存 " + count + " 个玩家的数据");
     }
 
     public void unloadPlayerStorage(UUID uuid) {
@@ -455,9 +452,9 @@ public class DatabaseManager {
         try (Connection conn = getConnection();
              Statement stmt = conn.createStatement()) {
             stmt.execute("PRAGMA wal_checkpoint(TRUNCATE)");
-            plugin.getLogger().info("WAL检查点已完成");
+            plugin.getPluginLogger().info("WAL检查点已完成");
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING, "执行WAL检查点时出错", e);
+            plugin.getPluginLogger().warning("执行WAL检查点时出错: " + e.getMessage());
         }
 
         loadedStorages.clear();

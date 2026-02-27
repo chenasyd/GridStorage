@@ -124,7 +124,7 @@ public class StorageManager {
             Inventory top = player.getOpenInventory().getTopInventory();
             // 如果玩家正在浏览某个槽位，先把 GUI 里的物品写回 StorageSlot
             if (top != null && plugin.getGuiManager().isSlotGUI(top)) {
-                plugin.getLogger().info("关服前同步玩家 " + player.getName() + " 的槽位内容");
+                plugin.getPluginLogger().info("关服前同步玩家 " + player.getName() + " 的槽位内容");
                 // autoSave=true 不需要给玩家发消息
                 plugin.getGuiManager().saveSlotContents(player, top, true);
             }

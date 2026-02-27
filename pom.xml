@@ -6,7 +6,7 @@
 
     <groupId>com.gridstorage</groupId>
     <artifactId>gridstorage-plugin</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <packaging>jar</packaging>
 
     <name>GridStorage Plugin</name>

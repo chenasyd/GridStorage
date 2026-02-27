@@ -1,11 +1,12 @@
 package com.gridstorage.scheduler;
 
-import com.gridstorage.GridStorage;
+import java.util.concurrent.TimeUnit;
+
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitScheduler;
 
-import java.util.concurrent.TimeUnit;
+import com.gridstorage.GridStorage;
 
 /**
  * Folia调度器适配器
@@ -38,7 +39,7 @@ public class FoliaScheduler {
                     .getMethod("getGlobalRegionScheduler")
                     .invoke(plugin.getServer());
             } catch (Exception e) {
-                plugin.getLogger().warning("Folia API检测失败，降级为标准模式");
+                plugin.getPluginLogger().warning("Folia API检测失败，降级为标准模式");
                 isFolia = false;
             }
         }
@@ -55,6 +56,12 @@ public class FoliaScheduler {
      * 异步执行任务
      */
     public void runAsync(Runnable task) {
+        // 插件已经被禁用时不要再注册任何任务，直接执行
+        if (!plugin.isEnabled()) {
+            task.run();
+            return;
+        }
+
         if (isFolia && asyncScheduler != null) {
             try {
                 asyncScheduler.getClass()
@@ -89,6 +96,12 @@ public class FoliaScheduler {
      * 延迟执行异步任务
      */
     public void runDelayedAsync(Runnable task, long delay, TimeUnit unit) {
+        // 同样检查插件状态
+        if (!plugin.isEnabled()) {
+            task.run();
+            return;
+        }
+
         if (isFolia && asyncScheduler != null) {
             try {
                 asyncScheduler.getClass()

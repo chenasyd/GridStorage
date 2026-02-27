@@ -154,7 +154,7 @@ public class GUIManager {
         // 检查是否已经在打开这个槽位
         Integer currentSlotId = playerSlotMap.get(player);
         if (currentSlotId != null && currentSlotId == newSlotId) {
-            plugin.getLogger().warning("玩家 " + player.getName() + " 尝试重复打开槽位 #" + newSlotId);
+            plugin.getPluginLogger().warning("玩家 " + player.getName() + " 尝试重复打开槽位 #" + newSlotId);
             return; // 已经打开了，不要重复打开
         }
 
@@ -164,7 +164,7 @@ public class GUIManager {
             if (oldInv != null && currentSlotId != null) {
                 // 使用当前槽位ID进行保存，避免依赖playerSlotMap
                 saveSlotContents(player, oldInv, currentSlotId, true); // 自动保存，不显示消息
-                plugin.getLogger().info("关闭之前的槽位 #" + currentSlotId + "，保存内容");
+                plugin.getPluginLogger().debug("关闭之前的槽位 #" + currentSlotId + "，保存内容");
             }
             openSlots.remove(player);
             playerSlotMap.remove(player);
@@ -186,7 +186,7 @@ public class GUIManager {
         player.openInventory(inv);
         openSlots.put(player, inv);
 
-        plugin.getLogger().info("玩家 " + player.getName() + " 打开了槽位 #" + newSlotId);
+        plugin.getPluginLogger().debug("玩家 " + player.getName() + " 打开了槽位 #" + newSlotId);
     }
 
     /**
@@ -232,7 +232,7 @@ public class GUIManager {
 
                 slot.updateAccessTime();
 
-                plugin.getLogger().info("保存槽位 #" + slotId + " 的内容到内存，共 " + itemCount + " 个物品");
+                plugin.getPluginLogger().debug("保存槽位 #" + slotId + " 的内容到内存，共 " + itemCount + " 个物品");
 
                 if (!autoSave) {
                     // 手动关闭时发送保存消息
@@ -241,15 +241,21 @@ public class GUIManager {
                 }
 
                 // 异步保存到数据库
-                plugin.getScheduler().runAsync(() -> {
-                    plugin.getLogger().info("异步保存槽位 #" + finalSlotId + " 到数据库");
+                if (plugin.isEnabled()) {         // 新增判断
+                    plugin.getScheduler().runAsync(() -> {
+                        plugin.getPluginLogger().debug("异步保存槽位 #" + finalSlotId + " 到数据库");
+                        plugin.getStorageManager().savePlayerStorage(player.getUniqueId());
+                    });
+                } else {
+                    // 插件正在停用，直接写入
+                    plugin.getPluginLogger().info("插件禁用期间同步保存槽位 #" + finalSlotId);
                     plugin.getStorageManager().savePlayerStorage(player.getUniqueId());
-                });
+                }
             } else {
-                plugin.getLogger().warning("槽位 #" + slotId + " 不存在，无法保存");
+                plugin.getPluginLogger().warning("槽位 #" + slotId + " 不存在，无法保存");
             }
         } else {
-            plugin.getLogger().warning("无法确定槽位ID，无法保存内容");
+            plugin.getPluginLogger().warning("无法确定槽位ID，无法保存内容");
         }
     }
 
