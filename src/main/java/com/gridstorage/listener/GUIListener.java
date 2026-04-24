@@ -14,11 +14,6 @@ import com.gridstorage.GridStorage;
 import com.gridstorage.manager.GUIManager;
 import com.gridstorage.model.PlayerStorage;
 
-/**
- * GUI 事件监听器
- * 处理所有GUI的点击和关闭事件
- * 支持槽位GUI内的物品存取，模拟普通箱子行为
- */
 public class GUIListener implements Listener {
 
     private final GridStorage plugin;
@@ -38,7 +33,6 @@ public class GUIListener implements Listener {
         Player player = (Player) event.getWhoClicked();
         ItemStack clicked = event.getCurrentItem();
 
-        // 检查是否是网格GUI
         if (guiManager.isGridGUI(event.getInventory())) {
             event.setCancelled(true);
             if (clicked != null && clicked.hasItemMeta()) {
@@ -48,25 +42,21 @@ public class GUIListener implements Listener {
             return;
         }
 
-        // 检查是否是槽位GUI
         if (guiManager.isSlotGUI(event.getInventory())) {
-            // 槽位GUI内的操作是允许的（模拟普通箱子）
             boolean isSlotAction = false;
 
             if (event.getRawSlot() < event.getInventory().getSize()) {
-                // 点击的是槽位GUI内部，允许操作
                 plugin.getPluginLogger().debug("槽位GUI内部操作: 槽位 " + event.getRawSlot());
                 isSlotAction = true;
             } else {
-                // 点击的是玩家背包，允许操作（与普通箱子一样可以拖入拖出）
                 plugin.getPluginLogger().debug("玩家背包操作: 槽位 " + event.getRawSlot());
                 isSlotAction = true;
             }
 
-            // 在操作后自动保存数据（延迟1 tick以避免干扰）
             if (isSlotAction && event.getAction() != org.bukkit.event.inventory.InventoryAction.NOTHING) {
-                plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-                    autoSaveSlotContents(player, event.getInventory());
+                final Inventory inv = event.getInventory();
+                plugin.getScheduler().runDelayedAtEntity(player, () -> {
+                    autoSaveSlotContents(player, inv);
                 }, 1L);
             }
         }
@@ -80,41 +70,32 @@ public class GUIListener implements Listener {
 
         Player player = (Player) event.getWhoClicked();
 
-        // 检查是否是网格GUI
         if (guiManager.isGridGUI(event.getInventory())) {
             event.setCancelled(true);
             return;
         }
 
-        // 检查是否是槽位GUI
         if (guiManager.isSlotGUI(event.getInventory())) {
-            // 允许拖拽操作（模拟普通箱子）
             boolean isSlotAction = false;
 
-            // 检查拖拽是否涉及槽位GUI
             for (int slot : event.getRawSlots()) {
                 if (slot < event.getInventory().getSize()) {
-                    // 拖拽到槽位GUI，允许
                     plugin.getPluginLogger().debug("槽位GUI拖拽操作");
                     isSlotAction = true;
                     break;
                 }
             }
 
-            // 在拖拽后自动保存数据（延迟1 tick以避免干扰）
             if (isSlotAction) {
-                plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
-                    autoSaveSlotContents(player, event.getInventory());
+                final Inventory inv = event.getInventory();
+                plugin.getScheduler().runDelayedAtEntity(player, () -> {
+                    autoSaveSlotContents(player, inv);
                 }, 1L);
             }
         }
     }
 
-    /**
-     * 处理网格GUI点击
-     */
     private void handleGridClick(Player player, ItemStack clicked, int rawSlot) {
-        // 使用NBT API获取NBT数据
         de.tr7zw.nbtapi.NBTItem nbtItem = new de.tr7zw.nbtapi.NBTItem(clicked);
         String type = nbtItem.getString("gridstorage_type");
 
@@ -127,7 +108,6 @@ public class GUIListener implements Listener {
 
         switch (type) {
             case "slot":
-                // 点击了槽位
                 String slotIdStr = nbtItem.getString("gridstorage_slot_id");
                 plugin.getPluginLogger().debug("槽位ID: " + slotIdStr);
                 if (slotIdStr != null && !slotIdStr.isEmpty()) {
@@ -142,7 +122,6 @@ public class GUIListener implements Listener {
                 break;
 
             case "navigation":
-                // 点击了导航按钮
                 String action = nbtItem.getString("gridstorage_action");
                 PlayerStorage storage = plugin.getStorageManager().getPlayerStorage(player);
 
@@ -170,15 +149,15 @@ public class GUIListener implements Listener {
         }
     }
 
-    /**
-     * 自动保存槽位内容
-     * 在玩家对槽位GUI进行操作后触发
-     */
-    private void autoSaveSlotContents(Player player, org.bukkit.inventory.Inventory inv) {
-        // 异步自动保存，不显示保存消息
-        plugin.getScheduler().runAsync(() -> {
-            guiManager.saveSlotContents(player, inv, true);
-        });
+    private void autoSaveSlotContents(Player player, Inventory inv) {
+        ItemStack[] snapshot = new ItemStack[inv.getSize()];
+        ItemStack[] contents = inv.getContents();
+        for (int i = 0; i < contents.length && i < snapshot.length; i++) {
+            snapshot[i] = contents[i] != null ? contents[i].clone() : null;
+        }
+
+        Integer slotId = guiManager.getPlayerSlotId(player);
+        guiManager.saveSlotContentsFromSnapshot(player, snapshot, slotId, true);
     }
 
     private String getPrefix() {
@@ -194,10 +173,17 @@ public class GUIListener implements Listener {
         Player player = (Player) event.getPlayer();
         Inventory inv = event.getInventory();
 
-        // 关闭槽位 GUI：先保存内容再清理映射
         if (guiManager.isSlotGUI(inv)) {
             plugin.getPluginLogger().info("槽位GUI 关闭，保存内容");
-            guiManager.saveSlotContents(player, inv);      // 会异步写数据库
+
+            ItemStack[] snapshot = new ItemStack[inv.getSize()];
+            ItemStack[] contents = inv.getContents();
+            for (int i = 0; i < contents.length && i < snapshot.length; i++) {
+                snapshot[i] = contents[i] != null ? contents[i].clone() : null;
+            }
+
+            Integer slotId = guiManager.getPlayerSlotId(player);
+            guiManager.saveSlotContentsFromSnapshot(player, snapshot, slotId, true);
             guiManager.closeSlotGUI(player);
         } else if (guiManager.isGridGUI(inv)) {
             plugin.getPluginLogger().debug("网格GUI 关闭，清理状态");

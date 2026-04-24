@@ -20,13 +20,8 @@ import com.gridstorage.model.PlayerStorage;
 import com.gridstorage.model.StorageSlot;
 
 import de.tr7zw.nbtapi.NBT;
-import de.tr7zw.nbtapi.iface.ReadWriteNBT; // 新增
+import de.tr7zw.nbtapi.iface.ReadWriteNBT;
 
-/**
- * 数据库管理器
- * 支持SQLite数据库存储
- * 使用NBTAPI进行物品数据序列化，支持潜影盒等特殊容器
- */
 public class DatabaseManager {
 
     private final GridStorage plugin;
@@ -37,7 +32,6 @@ public class DatabaseManager {
     public DatabaseManager(GridStorage plugin) {
         this.plugin = plugin;
         this.loadedStorages = new ConcurrentHashMap<>();
-        // make sure the plugin folder exists (shutdown 期间有时会被删除)
         plugin.getDataFolder().mkdirs();
         this.databaseFile = new File(plugin.getDataFolder(), "gridstorage.db");
         this.connectionUrl = "jdbc:sqlite:" + databaseFile.getAbsolutePath();
@@ -45,9 +39,6 @@ public class DatabaseManager {
         initializeDatabase();
     }
 
-    /**
-     * 获取数据库连接，确保目录存在
-     */
     private Connection getConnection() throws SQLException {
         File parent = databaseFile.getParentFile();
         if (parent != null && !parent.exists()) {
@@ -56,18 +47,12 @@ public class DatabaseManager {
         return DriverManager.getConnection(connectionUrl);
     }
 
-    /**
-     * 初始化数据库连接和表结构
-     */
     private void initializeDatabase() {
         try {
-            // 加载SQLite驱动
             Class.forName("org.sqlite.JDBC");
 
-            // 创建数据库连接（仅用于初始化）
             plugin.getPluginLogger().info("正在连接SQLite数据库: " + databaseFile.getAbsolutePath());
             try (Connection conn = getConnection()) {
-                // 启用WAL模式和优化设置
                 try (Statement stmt = conn.createStatement()) {
                     stmt.execute("PRAGMA journal_mode=WAL");
                     stmt.execute("PRAGMA synchronous=NORMAL");
@@ -76,7 +61,6 @@ public class DatabaseManager {
                     stmt.execute("PRAGMA page_size=4096");
                 }
 
-                // 创建表结构
                 createTables(conn);
             }
 
@@ -88,12 +72,8 @@ public class DatabaseManager {
         }
     }
 
-    /**
-     * 创建数据库表结构
-     */
     private void createTables(Connection conn) throws SQLException {
         try (Statement stmt = conn.createStatement()) {
-            // 创建玩家存储表
             String createPlayerStorageTable = """
                 CREATE TABLE IF NOT EXISTS player_storage (
                     uuid TEXT PRIMARY KEY,
@@ -105,8 +85,7 @@ public class DatabaseManager {
                 )
                 """;
             stmt.execute(createPlayerStorageTable);
-            
-            // 创建槽位表
+
             String createSlotTable = """
                 CREATE TABLE IF NOT EXISTS storage_slots (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -119,8 +98,7 @@ public class DatabaseManager {
                 )
                 """;
             stmt.execute(createSlotTable);
-            
-            // 创建索引
+
             stmt.execute("CREATE INDEX IF NOT EXISTS idx_slots_player_uuid ON storage_slots(player_uuid)");
             stmt.execute("CREATE INDEX IF NOT EXISTS idx_slots_slot_id ON storage_slots(slot_id)");
 
@@ -129,31 +107,24 @@ public class DatabaseManager {
     }
 
     public PlayerStorage loadPlayerStorage(UUID uuid) {
-        // 先检查缓存
         if (loadedStorages.containsKey(uuid)) {
             return loadedStorages.get(uuid);
         }
 
-        // 从数据库加载
         PlayerStorage storage = loadFromDatabase(uuid);
         if (storage == null) {
-            // 创建新的存储
             String playerName = plugin.getServer().getOfflinePlayer(uuid).getName();
             if (playerName == null || playerName.isEmpty()) {
                 playerName = "Unknown";
             }
             storage = new PlayerStorage(uuid, playerName, 100);
-            // 保存到数据库
             savePlayerStorageToDatabase(storage);
         }
-        
+
         loadedStorages.put(uuid, storage);
         return storage;
     }
 
-    /**
-     * 从数据库加载玩家存储
-     */
     private PlayerStorage loadFromDatabase(UUID uuid) {
         String query = "SELECT player_name, max_slots, current_page FROM player_storage WHERE uuid = ?";
 
@@ -161,31 +132,27 @@ public class DatabaseManager {
              PreparedStatement stmt = conn.prepareStatement(query)) {
             stmt.setString(1, uuid.toString());
             ResultSet rs = stmt.executeQuery();
-            
+
             if (rs.next()) {
                 String playerName = rs.getString("player_name");
                 int maxSlots = rs.getInt("max_slots");
                 int currentPage = rs.getInt("current_page");
-                
+
                 PlayerStorage storage = new PlayerStorage(uuid, playerName, maxSlots);
                 storage.setCurrentPage(currentPage);
-                
-                // 加载槽位数据
+
                 loadSlotsFromDatabase(storage);
-                
+
                 plugin.getPluginLogger().info("从数据库加载玩家数据: " + playerName + " (" + uuid + ")");
                 return storage;
             }
         } catch (SQLException e) {
             plugin.getPluginLogger().warning("加载玩家存储失败: " + uuid + ": " + e.getMessage());
         }
-        
+
         return null;
     }
 
-    /**
-     * 从数据库加载槽位数据
-     */
     private void loadSlotsFromDatabase(PlayerStorage storage) {
         String query = "SELECT slot_id, nbt_data FROM storage_slots WHERE player_uuid = ?";
 
@@ -208,7 +175,6 @@ public class DatabaseManager {
                     ItemStack[] items = deserializeItemsFromNBT(nbtData);
                     System.arraycopy(items, 0, slot.getContents(), 0, Math.min(items.length, 54));
 
-                    // 更新最后访问时间
                     slot.updateAccessTime();
 
                     loadedSlotCount++;
@@ -235,17 +201,13 @@ public class DatabaseManager {
         if (storage == null) {
             return;
         }
-        
+
         savePlayerStorageToDatabase(storage);
     }
 
-    /**
-     * 保存玩家存储到数据库
-     */
     private void savePlayerStorageToDatabase(PlayerStorage storage) {
         long currentTime = System.currentTimeMillis();
 
-        // 保存或更新玩家存储基本信息
         String upsertPlayerQuery = """
             INSERT INTO player_storage (uuid, player_name, max_slots, current_page, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -256,7 +218,6 @@ public class DatabaseManager {
                 updated_at = excluded.updated_at
             """;
 
-        // 使用独立连接进行事务操作
         try (Connection conn = getConnection();
              PreparedStatement stmt = conn.prepareStatement(upsertPlayerQuery)) {
 
@@ -268,7 +229,6 @@ public class DatabaseManager {
             stmt.setLong(6, currentTime);
             stmt.executeUpdate();
 
-            // 保存槽位数据
             saveSlotsToDatabase(storage, conn);
 
         } catch (SQLException e) {
@@ -276,9 +236,6 @@ public class DatabaseManager {
         }
     }
 
-    /**
-     * 保存槽位数据到数据库
-     */
     private void saveSlotsToDatabase(PlayerStorage storage, Connection conn) throws SQLException {
         String upsertSlotQuery = """
             INSERT INTO storage_slots (player_uuid, slot_id, nbt_data, last_access_time)
@@ -288,13 +245,15 @@ public class DatabaseManager {
                 last_access_time = excluded.last_access_time
             """;
 
+        String deleteSlotQuery = "DELETE FROM storage_slots WHERE player_uuid = ? AND slot_id = ?";
+
         boolean autoCommit = true;
         try {
-            // 关闭 auto-commit 模式以启用事务
             autoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
 
-            try (PreparedStatement upsertStmt = conn.prepareStatement(upsertSlotQuery)) {
+            try (PreparedStatement upsertStmt = conn.prepareStatement(upsertSlotQuery);
+                 PreparedStatement deleteStmt = conn.prepareStatement(deleteSlotQuery)) {
 
                 int savedSlotCount = 0;
                 int totalItems = 0;
@@ -303,7 +262,6 @@ public class DatabaseManager {
                     if (slot != null) {
                         String nbtData = serializeItemsToNBT(slot.getContents());
                         if (nbtData != null) {
-                            // 只保存有物品的槽位
                             upsertStmt.setString(1, storage.getPlayerUUID().toString());
                             upsertStmt.setInt(2, slot.getSlotId());
                             upsertStmt.setString(3, nbtData);
@@ -316,21 +274,20 @@ public class DatabaseManager {
                                     totalItems++;
                                 }
                             }
+                        } else {
+                            deleteStmt.setString(1, storage.getPlayerUUID().toString());
+                            deleteStmt.setInt(2, slot.getSlotId());
+                            deleteStmt.addBatch();
                         }
-                        // 注意：不再删除空槽位的数据，避免用空数据覆盖已有数据
                     }
                 }
 
-                if (savedSlotCount > 0) {
-                    upsertStmt.executeBatch();
-                    conn.commit();
-                } else {
-                    conn.rollback(); // 没有需要保存的数据，回滚
-                }
+                upsertStmt.executeBatch();
+                deleteStmt.executeBatch();
+                conn.commit();
 
                 plugin.getPluginLogger().info("保存槽位数据: " + savedSlotCount + " 个槽位, " + totalItems + " 个物品");
             } catch (SQLException e) {
-                // 回滚事务
                 try {
                     conn.rollback();
                 } catch (SQLException rollbackEx) {
@@ -339,7 +296,6 @@ public class DatabaseManager {
                 throw e;
             }
         } finally {
-            // 恢复 auto-commit 模式
             try {
                 conn.setAutoCommit(autoCommit);
             } catch (SQLException e) {
@@ -348,8 +304,7 @@ public class DatabaseManager {
         }
     }
 
-    private String serializeItemsToNBT(ItemStack[] items) {
-        // 检查是否有任何非空气物品
+    String serializeItemsToNBT(ItemStack[] items) {
         boolean hasItem = false;
         for (ItemStack item : items) {
             if (item != null && item.getType() != Material.AIR) {
@@ -368,26 +323,33 @@ public class DatabaseManager {
             ItemStack item = items[i];
             if (item != null && item.getType() != Material.AIR) {
                 try {
-                    // 改为 ReadWriteNBT 类型
                     ReadWriteNBT itemNbt = NBT.itemStackToNBT(item);
-                    compound.getOrCreateCompound("slot_" + i).mergeCompound(itemNbt);
-
-                    itemCount++;
-                    plugin.getPluginLogger().debug("序列化槽位 " + i + " 的物品: " + item.getType()
-                            + ", NBT: " + itemNbt.toString());
+                    if (itemNbt != null) {
+                        String itemNbtString = itemNbt.toString();
+                        compound.setString("slot_" + i, itemNbtString);
+                        itemCount++;
+                        plugin.getPluginLogger().debug("序列化槽位 " + i + " 的物品: " + item.getType()
+                                + ", NBT长度: " + itemNbtString.length());
+                    } else {
+                        plugin.getPluginLogger().warning("序列化槽位 " + i + " 返回null NBT，物品: " + item.getType());
+                    }
                 } catch (Exception e) {
                     plugin.getPluginLogger().warning("序列化槽位 " + i + " 失败: " + e.getMessage());
                 }
             }
         }
 
+        if (itemCount == 0) {
+            return null;
+        }
+
         compound.setString("size", String.valueOf(items.length));
         String result = compound.toString();
-        plugin.getPluginLogger().debug("序列化完成，总物品数: " + itemCount);
+        plugin.getPluginLogger().debug("序列化完成，总物品数: " + itemCount + ", 数据长度: " + result.length());
         return result;
     }
 
-    private ItemStack[] deserializeItemsFromNBT(String nbtData) {
+    ItemStack[] deserializeItemsFromNBT(String nbtData) {
         ItemStack[] items = new ItemStack[54];
         int itemCount = 0;
 
@@ -405,19 +367,54 @@ public class DatabaseManager {
             for (int i = 0; i < 54; i++) {
                 String slotKey = "slot_" + i;
                 if (compound.hasTag(slotKey)) {
-                    // 同样使用 ReadWriteNBT
-                    ReadWriteNBT itemCompound = compound.getCompound(slotKey);
-                    if (itemCompound != null) {
+                    String slotNbtString = compound.getString(slotKey);
+                    if (slotNbtString != null && !slotNbtString.isEmpty() && !slotNbtString.equals("{}")) {
                         try {
-                            ItemStack stack = NBT.itemStackFromNBT(itemCompound);
-                            if (stack != null && stack.getType() != Material.AIR) {
-                                items[i] = stack;
-                                itemCount++;
-                                plugin.getPluginLogger().debug("成功恢复槽位 " + i + " 的物品: " + stack.getType());
+                            ReadWriteNBT itemCompound = new de.tr7zw.nbtapi.NBTContainer(slotNbtString);
+                            if (isValidItemNBT(itemCompound)) {
+                                ItemStack stack = NBT.itemStackFromNBT(itemCompound);
+                                if (stack != null && stack.getType() != Material.AIR) {
+                                    items[i] = stack;
+                                    itemCount++;
+                                    plugin.getPluginLogger().debug("成功恢复槽位 " + i + " 的物品: " + stack.getType());
+                                }
+                            } else {
+                                plugin.getPluginLogger().debug("槽位 " + i + " 的NBT数据无效（空化合物），跳过");
+                            }
+                        } catch (Exception e) {
+                            try {
+                                ReadWriteNBT itemCompound = compound.getCompound(slotKey);
+                                if (itemCompound != null && isValidItemNBT(itemCompound)) {
+                                    ItemStack stack = NBT.itemStackFromNBT(itemCompound);
+                                    if (stack != null && stack.getType() != Material.AIR) {
+                                        items[i] = stack;
+                                        itemCount++;
+                                        plugin.getPluginLogger().debug("成功恢复槽位 " + i + " 的物品(兼容模式): " + stack.getType());
+                                    }
+                                } else {
+                                    plugin.getPluginLogger().debug("槽位 " + i + " 的兼容模式NBT数据无效，跳过");
+                                }
+                            } catch (Exception e2) {
+                                plugin.getPluginLogger().warning(
+                                        "解析槽位 " + i + " 的物品数据失败，跳过: " + e2.getMessage());
+                            }
+                        }
+                    } else {
+                        try {
+                            ReadWriteNBT itemCompound = compound.getCompound(slotKey);
+                            if (itemCompound != null && isValidItemNBT(itemCompound)) {
+                                ItemStack stack = NBT.itemStackFromNBT(itemCompound);
+                                if (stack != null && stack.getType() != Material.AIR) {
+                                    items[i] = stack;
+                                    itemCount++;
+                                    plugin.getPluginLogger().debug("成功恢复槽位 " + i + " 的物品(旧格式): " + stack.getType());
+                                }
+                            } else {
+                                plugin.getPluginLogger().debug("槽位 " + i + " 的旧格式NBT数据为空化合物，跳过");
                             }
                         } catch (Exception e) {
                             plugin.getPluginLogger().warning(
-                                    "解析槽位 " + i + " 的物品数据失败，跳过: " + e.getMessage());
+                                    "解析槽位 " + i + " 的物品数据失败(旧格式)，跳过: " + e.getMessage());
                         }
                     }
                 }
@@ -429,6 +426,27 @@ public class DatabaseManager {
         }
 
         return items;
+    }
+
+    private boolean isValidItemNBT(ReadWriteNBT nbt) {
+        if (nbt == null) {
+            return false;
+        }
+        try {
+            String id = nbt.getString("id");
+            if (id == null || id.isEmpty()) {
+                if (nbt.getKeys().isEmpty()) {
+                    return false;
+                }
+                ReadWriteNBT innerTag = nbt.getCompound("tag");
+                if (innerTag == null && !nbt.hasTag("Count") && !nbt.hasTag("count")) {
+                    return false;
+                }
+            }
+        } catch (Exception e) {
+            return false;
+        }
+        return true;
     }
 
     public void saveAll() {
@@ -448,7 +466,6 @@ public class DatabaseManager {
     public void shutdown() {
         saveAll();
 
-        // 执行WAL检查点以将WAL文件合并到主数据库
         try (Connection conn = getConnection();
              Statement stmt = conn.createStatement()) {
             stmt.execute("PRAGMA wal_checkpoint(TRUNCATE)");
@@ -458,5 +475,9 @@ public class DatabaseManager {
         }
 
         loadedStorages.clear();
+    }
+
+    public Map<UUID, PlayerStorage> getLoadedStorages() {
+        return loadedStorages;
     }
 }

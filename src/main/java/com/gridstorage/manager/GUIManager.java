@@ -3,6 +3,8 @@ package com.gridstorage.manager;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -17,18 +19,13 @@ import com.gridstorage.model.StorageSlot;
 
 import de.tr7zw.nbtapi.NBT;
 
-/**
- * GUI 管理器
- * 管理所有GUI的创建和更新
- */
 public class GUIManager {
 
     private final GridStorage plugin;
-    private final Map<Player, Inventory> openSlots;
-    private final Map<Player, Inventory> openGrids;
-    private final Map<Player, Integer> playerSlotMap; // 记录玩家当前打开的槽位ID
+    private final Map<UUID, Inventory> openSlots;
+    private final Map<UUID, Inventory> openGrids;
+    private final Map<UUID, Integer> playerSlotMap;
 
-    // GUI 常量
     public static final int GRID_SIZE = 54;
     public static final int PAGE_SIZE = 45;
     public static final int SLOT_SIZE = 54;
@@ -37,14 +34,11 @@ public class GUIManager {
 
     public GUIManager(GridStorage plugin) {
         this.plugin = plugin;
-        this.openSlots = new HashMap<>();
-        this.openGrids = new HashMap<>();
-        this.playerSlotMap = new HashMap<>();
+        this.openSlots = new ConcurrentHashMap<>();
+        this.openGrids = new ConcurrentHashMap<>();
+        this.playerSlotMap = new ConcurrentHashMap<>();
     }
 
-    /**
-     * 打开主网格GUI
-     */
     public void openGridGUI(Player player, PlayerStorage storage) {
         int page = storage.getCurrentPage();
         String title = plugin.getConfigManager().getMessage("storage.gui.title",
@@ -55,29 +49,23 @@ public class GUIManager {
         fillGridInventory(inv, storage, page);
 
         player.openInventory(inv);
-        openGrids.put(player, inv);
+        openGrids.put(player.getUniqueId(), inv);
     }
 
-    /**
-     * 填充网格GUI
-     */
     private void fillGridInventory(Inventory inv, PlayerStorage storage, int page) {
-        // 填充槽位 0-44 (对应仓库编号 1-45)
         int startSlot = page * PAGE_SIZE + 1;
         for (int i = 0; i < PAGE_SIZE; i++) {
             int slotId = startSlot + i;
             if (slotId <= storage.getMaxSlots()) {
                 inv.setItem(i, createSlotItem(slotId));
             } else {
-                inv.setItem(i, null); // 空槽位
+                inv.setItem(i, null);
             }
         }
 
-        // 45槽位：前一页按钮
         ItemStack prevButton = createNavigationButton(Material.ARROW, "prev");
         inv.setItem(PREV_PAGE_SLOT, prevButton);
 
-        // 46-52槽位：玻璃板填充
         ItemStack glass = new ItemStack(Material.LIGHT_GRAY_STAINED_GLASS_PANE);
         ItemMeta glassMeta = glass.getItemMeta();
         glassMeta.setDisplayName(" ");
@@ -86,14 +74,10 @@ public class GUIManager {
             inv.setItem(i, glass.clone());
         }
 
-        // 53槽位：后一页按钮
         ItemStack nextButton = createNavigationButton(Material.ARROW, "next");
         inv.setItem(NEXT_PAGE_SLOT, nextButton);
     }
 
-    /**
-     * 创建槽位物品
-     */
     private ItemStack createSlotItem(int slotId) {
         ItemStack item = new ItemStack(Material.CHEST);
         ItemMeta meta = item.getItemMeta();
@@ -105,7 +89,6 @@ public class GUIManager {
 
         item.setItemMeta(meta);
 
-        // 使用NBT标记槽位ID（在设置ItemMeta之后）
         NBT.modify(item, nbt -> {
             nbt.setString("gridstorage_slot_id", String.valueOf(slotId));
             nbt.setString("gridstorage_type", "slot");
@@ -114,9 +97,6 @@ public class GUIManager {
         return item;
     }
 
-    /**
-     * 创建导航按钮
-     */
     private ItemStack createNavigationButton(Material material, String buttonType) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
@@ -134,7 +114,6 @@ public class GUIManager {
 
         item.setItemMeta(meta);
 
-        // 使用NBT标记按钮类型（在设置ItemMeta之后）
         NBT.modify(item, nbt -> {
             nbt.setString("gridstorage_type", "navigation");
             nbt.setString("gridstorage_action", buttonType);
@@ -143,87 +122,62 @@ public class GUIManager {
         return item;
     }
 
-    /**
-     * 打开单个槽位GUI
-     * @param player 玩家
-     * @param slot 要打开的槽位
-     */
     public void openSlotGUI(Player player, StorageSlot slot) {
+        UUID uuid = player.getUniqueId();
         int newSlotId = slot.getSlotId();
 
-        // 检查是否已经在打开这个槽位
-        Integer currentSlotId = playerSlotMap.get(player);
+        Integer currentSlotId = playerSlotMap.get(uuid);
         if (currentSlotId != null && currentSlotId == newSlotId) {
             plugin.getPluginLogger().warning("玩家 " + player.getName() + " 尝试重复打开槽位 #" + newSlotId);
-            return; // 已经打开了，不要重复打开
+            return;
         }
 
-        // 如果玩家已经打开了其他槽位GUI，先保存并关闭
-        if (openSlots.containsKey(player)) {
-            Inventory oldInv = openSlots.get(player);
+        if (openSlots.containsKey(uuid)) {
+            Inventory oldInv = openSlots.get(uuid);
             if (oldInv != null && currentSlotId != null) {
-                // 使用当前槽位ID进行保存，避免依赖playerSlotMap
-                saveSlotContents(player, oldInv, currentSlotId, true); // 自动保存，不显示消息
+                saveSlotContents(player, oldInv, currentSlotId, true);
                 plugin.getPluginLogger().debug("关闭之前的槽位 #" + currentSlotId + "，保存内容");
             }
-            openSlots.remove(player);
-            playerSlotMap.remove(player);
+            openSlots.remove(uuid);
+            playerSlotMap.remove(uuid);
         }
 
         String title = plugin.getConfigManager().getMessage("storage.gui.slot-title", String.valueOf(newSlotId));
         Inventory inv = Bukkit.createInventory(null, SLOT_SIZE, title);
 
-        // 载入槽位内容（克隆物品以避免引用问题）
         ItemStack[] contents = slot.getContents();
         for (int i = 0; i < contents.length && i < SLOT_SIZE; i++) {
             ItemStack item = contents[i];
             inv.setItem(i, item != null ? item.clone() : null);
         }
 
-        // 记录玩家打开的槽位ID
-        playerSlotMap.put(player, newSlotId);
+        playerSlotMap.put(uuid, newSlotId);
 
         player.openInventory(inv);
-        openSlots.put(player, inv);
+        openSlots.put(uuid, inv);
 
         plugin.getPluginLogger().debug("玩家 " + player.getName() + " 打开了槽位 #" + newSlotId);
     }
 
-    /**
-     * 更新网格GUI（仅对当前操作玩家可见）
-     */
     public void updateGridGUI(Player player, PlayerStorage storage) {
-        // 重新打开GUI以更新标题
         openGridGUI(player, storage);
     }
 
-    /**
-     * 保存槽位内容
-     * 将GUI inventory中的物品同步回StorageSlot
-     * @param player 玩家
-     * @param inv 槽位GUI inventory
-     * @param slotId 槽位ID（如果为null则从playerSlotMap获取）
-     * @param autoSave 是否为自动保存（控制是否输出日志）
-     */
     public void saveSlotContents(Player player, Inventory inv, Integer slotId, boolean autoSave) {
-        // 如果没有提供槽位ID，尝试从映射中获取
         if (slotId == null) {
-            slotId = playerSlotMap.get(player);
+            slotId = playerSlotMap.get(player.getUniqueId());
         }
 
         if (slotId != null) {
-            final Integer finalSlotId = slotId; // 用于lambda表达式中
+            final Integer finalSlotId = slotId;
             StorageSlot slot = plugin.getStorageManager().getSlot(player.getUniqueId(), slotId);
             if (slot != null) {
-                // 复制inventory中的物品到StorageSlot
                 ItemStack[] inventoryContents = inv.getContents();
                 ItemStack[] slotContents = slot.getContents();
 
                 int itemCount = 0;
-                // 逐个复制物品（支持潜影盒等特殊容器）
                 for (int i = 0; i < Math.min(inventoryContents.length, slotContents.length); i++) {
                     ItemStack item = inventoryContents[i];
-                    // 克隆物品以避免引用问题
                     slotContents[i] = item != null ? item.clone() : null;
                     if (item != null) {
                         itemCount++;
@@ -235,19 +189,16 @@ public class GUIManager {
                 plugin.getPluginLogger().debug("保存槽位 #" + slotId + " 的内容到内存，共 " + itemCount + " 个物品");
 
                 if (!autoSave) {
-                    // 手动关闭时发送保存消息
                     player.sendMessage(getPrefix() + plugin.getConfigManager().getMessage(
                         "storage.messages.slot-saved", String.valueOf(slotId)));
                 }
 
-                // 异步保存到数据库
-                if (plugin.isEnabled()) {         // 新增判断
+                if (plugin.isEnabled()) {
                     plugin.getScheduler().runAsync(() -> {
                         plugin.getPluginLogger().debug("异步保存槽位 #" + finalSlotId + " 到数据库");
                         plugin.getStorageManager().savePlayerStorage(player.getUniqueId());
                     });
                 } else {
-                    // 插件正在停用，直接写入
                     plugin.getPluginLogger().info("插件禁用期间同步保存槽位 #" + finalSlotId);
                     plugin.getStorageManager().savePlayerStorage(player.getUniqueId());
                 }
@@ -259,56 +210,81 @@ public class GUIManager {
         }
     }
 
-    /**
-     * 保存槽位内容（便捷方法，自动保存）
-     */
+    public void saveSlotContentsFromSnapshot(Player player, ItemStack[] snapshot, Integer slotId, boolean autoSave) {
+        if (slotId == null) {
+            slotId = playerSlotMap.get(player.getUniqueId());
+        }
+
+        if (slotId == null) {
+            plugin.getPluginLogger().warning("无法确定槽位ID，无法保存内容");
+            return;
+        }
+
+        final Integer finalSlotId = slotId;
+        StorageSlot slot = plugin.getStorageManager().getSlot(player.getUniqueId(), slotId);
+        if (slot == null) {
+            plugin.getPluginLogger().warning("槽位 #" + slotId + " 不存在，无法保存");
+            return;
+        }
+
+        ItemStack[] slotContents = slot.getContents();
+        int itemCount = 0;
+        for (int i = 0; i < Math.min(snapshot.length, slotContents.length); i++) {
+            slotContents[i] = snapshot[i] != null ? snapshot[i].clone() : null;
+            if (snapshot[i] != null) {
+                itemCount++;
+            }
+        }
+
+        slot.updateAccessTime();
+
+        plugin.getPluginLogger().debug("保存槽位 #" + slotId + " 的内容到内存（快照方式），共 " + itemCount + " 个物品");
+
+        if (!autoSave) {
+            player.sendMessage(getPrefix() + plugin.getConfigManager().getMessage(
+                "storage.messages.slot-saved", String.valueOf(slotId)));
+        }
+
+        if (plugin.isEnabled()) {
+            plugin.getScheduler().runAsync(() -> {
+                plugin.getPluginLogger().debug("异步保存槽位 #" + finalSlotId + " 到数据库");
+                plugin.getStorageManager().savePlayerStorage(player.getUniqueId());
+            });
+        } else {
+            plugin.getPluginLogger().info("插件禁用期间同步保存槽位 #" + finalSlotId);
+            plugin.getStorageManager().savePlayerStorage(player.getUniqueId());
+        }
+    }
+
     public void saveSlotContents(Player player, Inventory inv) {
         saveSlotContents(player, inv, null, false);
     }
 
-    /**
-     * 保存槽位内容（便捷方法）
-     * @param player 玩家
-     * @param inv 槽位GUI inventory
-     * @param autoSave 是否为自动保存（控制是否输出日志）
-     */
     public void saveSlotContents(Player player, Inventory inv, boolean autoSave) {
         saveSlotContents(player, inv, null, autoSave);
+    }
+
+    public Integer getPlayerSlotId(Player player) {
+        return playerSlotMap.get(player.getUniqueId());
     }
 
     private String getPrefix() {
         return plugin.getConfigManager().getPrefix();
     }
 
-    /**
-     * 关闭GUI（关闭网格GUI时调用）
-     * 不处理槽位GUI的关闭，槽位GUI的关闭由 onInventoryClose 事件处理
-     */
     public void closeGUI(Player player) {
-        // 只清理网格GUI相关数据，不处理槽位GUI
-        openGrids.remove(player);
-
-        // 注意：不清理 playerSlotMap 和 openSlots，因为槽位GUI有自己的关闭逻辑
-        // 这样可以防止在关闭网格GUI时意外清理槽位GUI的数据
+        openGrids.remove(player.getUniqueId());
     }
 
-    /**
-     * 关闭槽位GUI
-     */
     public void closeSlotGUI(Player player) {
-        // 清理槽位GUI相关数据
-        openSlots.remove(player);
-        playerSlotMap.remove(player);
+        openSlots.remove(player.getUniqueId());
+        playerSlotMap.remove(player.getUniqueId());
     }
 
-    /**
-     * 检查是否是网格GUI
-     */
     public boolean isGridGUI(Inventory inv) {
         if (inv == null || inv.getSize() != GRID_SIZE) {
             return false;
         }
-        // 检查是否在打开的GUI列表中
         for (Inventory openInv : openGrids.values()) {
             if (openInv == inv) {
                 return true;
@@ -317,14 +293,10 @@ public class GUIManager {
         return false;
     }
 
-    /**
-     * 检查是否是槽位GUI
-     */
     public boolean isSlotGUI(Inventory inv) {
         if (inv == null || inv.getSize() != SLOT_SIZE) {
             return false;
         }
-        // 检查是否在打开的GUI列表中
         for (Inventory openInv : openSlots.values()) {
             if (openInv == inv) {
                 return true;

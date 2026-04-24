@@ -156,11 +156,8 @@ public class PluginLogger {
         if (fileLogging) {
             writeToFile(formattedMessage);
         }
-        
-        // 根据日志级别决定是否输出到控制台（仅重要日志）
-        if (logLevel == LogLevel.ERROR || logLevel == LogLevel.WARN) {
-            writeToConsole(logLevel, message);
-        }
+
+        writeToConsole(logLevel, message);
     }
     
     /**
