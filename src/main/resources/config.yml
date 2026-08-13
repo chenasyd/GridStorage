@@ -1,61 +1,22 @@
-# 网格存储插件主配置文件
+# GridStorage main config
 
-# 数据库配置
-database:
-  # 数据存储类型: sqlite(本地文件) 或 mysql(数据库)
-  type: sqlite
-
-# 网格配置
+# Personal grid
 grid:
-  # 网格名称
   name: "网格仓库"
-  # 最大仓库槽位数量
+  # Max personal storage slots (each slot = 54 inventory cells)
   max-storage-count: 100
-  # 每页显示的槽位数量
   page-size: 45
-  # GUI大小
   gui-size: 54
 
-# 语言配置
 language:
-  # 默认语言: zh(中文), en(英文)
   default: "zh"
-  # 是否允许玩家切换语言
   allow-player-switch: false
 
-# 消息配置
-messages:
-  # 是否启用消息
-  enabled: true
-  # 消息前缀
-  prefix: "&6[网格存储] &r"
-  # 消息颜色
-  colors:
-    success: "&a"
-    error: "&c"
-    info: "&e"
-    warning: "&6"
-
-# 日志配置
 logging:
-  # 是否启用日志
   enabled: true
-  # 日志级别: DEBUG, INFO, WARN, ERROR
-  # DEBUG - 最详细的日志，包含所有调试信息
-  # INFO - 一般信息日志
-  # WARN - 警告信息
-  # ERROR - 仅错误信息
+  # DEBUG, INFO, WARN, ERROR
   level: INFO
-  # 是否记录到文件（记录到 plugins/GridStorage/logs/ 目录）
-  # 设置为 true 时日志会保存到文件，不会在终端显示（除ERROR和WARN）
-  # 设置为 false 时日志会直接输出到服务器控制台
   file-logging: false
-  # 日志文件路径（相对于插件数据文件夹）
   log-file: "logs/gridstorage.log"
-  # 单个日志文件最大大小（MB）
-  # 超过此大小会自动创建新文件并滚动旧的
   max-file-size: 10
-  # 保留的日志文件数量（不包括当前日志文件）
-  # 超过此数量的旧日志会被自动删除
   max-files: 5
-

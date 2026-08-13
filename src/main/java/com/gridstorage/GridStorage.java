@@ -1,19 +1,16 @@
 package com.gridstorage;
 
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.gridstorage.command.GridStorageCommand;
 import com.gridstorage.config.ConfigManager;
 import com.gridstorage.listener.GUIListener;
+import com.gridstorage.logging.PluginLogger;
 import com.gridstorage.manager.GUIManager;
 import com.gridstorage.manager.StorageManager;
 import com.gridstorage.scheduler.FoliaScheduler;
-import com.gridstorage.logging.PluginLogger;
-
-import de.tr7zw.nbtapi.NBT;
+import com.gridstorage.scheduler.FoliaScheduler.CancelHandle;
 
 public class GridStorage extends JavaPlugin {
 
@@ -23,6 +20,8 @@ public class GridStorage extends JavaPlugin {
     private GUIManager guiManager;
     private FoliaScheduler scheduler;
     private PluginLogger pluginLogger;
+    private boolean nbtApiAvailable;
+    private CancelHandle autoSaveHandle;
 
     @Override
     public void onEnable() {
@@ -38,12 +37,12 @@ public class GridStorage extends JavaPlugin {
 
         this.configManager = new ConfigManager(this);
 
-        if (!NBT.preloadApi()) {
-            pluginLogger.error("NBT API初始化失败！");
-            getPluginLoader().disablePlugin(this);
-            return;
+        this.nbtApiAvailable = detectNbtApi();
+        if (!nbtApiAvailable) {
+            pluginLogger.error("未检测到可用的 NBTAPI，个人仓库功能已禁用。请安装 NBTAPI 后重启。");
+        } else {
+            pluginLogger.info("NBTAPI 可用");
         }
-        pluginLogger.debug("NBT API 初始化成功");
 
         this.storageManager = new StorageManager(this);
         this.guiManager = new GUIManager(this);
@@ -56,62 +55,64 @@ public class GridStorage extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new GUIListener(this), this);
         pluginLogger.debug("监听器注册完成");
 
-        startAutoSaveTask();
+        if (nbtApiAvailable) {
+            startAutoSaveTask();
+        }
 
-        pluginLogger.info("GridStorage 插件已启用 v" + getDescription().getVersion());
+        pluginLogger.info("GridStorage 插件已启用 v" + getDescription().getVersion()
+                + (nbtApiAvailable ? "" : "（仓库功能关闭：缺少 NBTAPI）"));
+    }
+
+    private boolean detectNbtApi() {
+        Plugin nbtPlugin = getServer().getPluginManager().getPlugin("NBTAPI");
+        if (nbtPlugin == null || !nbtPlugin.isEnabled()) {
+            return false;
+        }
+        try {
+            Class<?> nbtClass = Class.forName("de.tr7zw.nbtapi.NBT");
+            Object ok = nbtClass.getMethod("preloadApi").invoke(null);
+            return Boolean.TRUE.equals(ok);
+        } catch (Throwable t) {
+            pluginLogger.warning("NBTAPI 检测失败: " + t.getMessage());
+            return false;
+        }
     }
 
     @Override
     public void onDisable() {
-        pluginLogger.info("开始保存数据...");
-
-        if (storageManager != null) {
-            storageManager.forceCloseAndSaveAll();
+        if (pluginLogger != null) {
+            pluginLogger.info("开始保存数据...");
         }
 
-        CountDownLatch saveLatch = new CountDownLatch(1);
-        if (scheduler != null && isEnabled()) {
-            scheduler.runAsync(() -> {
-                try {
-                    if (storageManager != null) {
-                        storageManager.getDatabaseManager().saveAll();
-                        storageManager.getDatabaseManager().shutdown();
-                    }
-                } finally {
-                    saveLatch.countDown();
-                }
-            });
-        } else {
-            if (storageManager != null) {
-                storageManager.getDatabaseManager().saveAll();
-                storageManager.getDatabaseManager().shutdown();
+        if (autoSaveHandle != null) {
+            try {
+                autoSaveHandle.cancel();
+            } catch (Exception ignored) {
             }
-            saveLatch.countDown();
+            autoSaveHandle = null;
         }
 
-        try {
-            boolean completed = saveLatch.await(10, TimeUnit.SECONDS);
-            if (!completed) {
-                pluginLogger.warning("异步保存超时（10秒），部分数据可能未保存");
-            }
-        } catch (InterruptedException e) {
-            pluginLogger.error("等待异步保存时被中断", e);
-            Thread.currentThread().interrupt();
+        if (storageManager != null && nbtApiAvailable) {
+            // Sync snapshot + single saveAll inside forceCloseAndSaveAll, then WAL checkpoint
+            storageManager.shutdown();
         }
 
         if (scheduler != null) {
             scheduler.cancelAllTasks();
         }
 
-        pluginLogger.info("GridStorage 插件已禁用");
-
         if (pluginLogger != null) {
+            pluginLogger.info("GridStorage 插件已禁用");
             pluginLogger.close();
         }
     }
 
     public static GridStorage getInstance() {
         return instance;
+    }
+
+    public boolean isNbtApiAvailable() {
+        return nbtApiAvailable;
     }
 
     public ConfigManager getConfigManager() {
@@ -135,18 +136,16 @@ public class GridStorage extends JavaPlugin {
     }
 
     private void startAutoSaveTask() {
-        long interval = 300;
-        scheduler.runDelayedGlobal(() -> {
+        // 5 minutes = 6000 ticks
+        long periodTicks = 20L * 60L * 5L;
+        autoSaveHandle = scheduler.runAtFixedRateGlobal(() -> {
             scheduler.runAsync(() -> {
                 if (storageManager != null) {
                     storageManager.saveAll();
                     pluginLogger.info("定期自动保存完成");
                 }
             });
-
-            startAutoSaveTask();
-        }, interval, java.util.concurrent.TimeUnit.SECONDS);
-
+        }, periodTicks, periodTicks);
         pluginLogger.info("已启动定期自动保存任务（每5分钟）");
     }
 }

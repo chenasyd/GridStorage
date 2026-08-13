@@ -22,6 +22,9 @@ storage:
     open-slot: "&a已打开仓库 #{0}"
     slot-saved: "&a仓库 #{0} 已保存"
     all-saved: "&a所有仓库数据已保存"
+    nbtapi-missing: "&c个人仓库需要安装 NBTAPI 插件后才能使用。"
+    load-failed: "&c加载仓库失败，请稍后重试。"
+    in-use: "&c仓库正在保存中，请稍后再试。"
 
 prefix: "&6[网格存储] &r"
 

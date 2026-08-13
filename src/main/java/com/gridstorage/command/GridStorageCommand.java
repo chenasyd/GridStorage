@@ -37,9 +37,7 @@ public class GridStorageCommand implements CommandExecutor {
 
     private boolean handleGridStorageCommand(Player player, String[] args) {
         if (args.length == 0) {
-            // 打开仓库
             plugin.getStorageManager().openStorage(player);
-            player.sendMessage(getPrefix() + plugin.getConfigManager().getMessage("storage.messages.open-storage"));
             return true;
         }
 
@@ -55,14 +53,12 @@ public class GridStorageCommand implements CommandExecutor {
                             player.sendMessage(getPrefix() + plugin.getConfigManager().getMessage("storage.messages.invalid-slot"));
                         } else {
                             plugin.getStorageManager().openSlot(player, slotId);
-                            player.sendMessage(getPrefix() + plugin.getConfigManager().getMessage("storage.messages.open-slot", String.valueOf(slotId)));
                         }
                     } catch (NumberFormatException e) {
                         player.sendMessage(getPrefix() + plugin.getConfigManager().getMessage("storage.messages.invalid-slot"));
                     }
                 } else {
                     plugin.getStorageManager().openStorage(player);
-                    player.sendMessage(getPrefix() + plugin.getConfigManager().getMessage("storage.messages.open-storage"));
                 }
                 return true;
             case "reload":

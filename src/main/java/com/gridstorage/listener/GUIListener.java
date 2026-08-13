@@ -7,12 +7,16 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
 import com.gridstorage.GridStorage;
+import com.gridstorage.gui.GridGuiHolder;
+import com.gridstorage.gui.StorageSlotHolder;
 import com.gridstorage.manager.GUIManager;
 import com.gridstorage.model.PlayerStorage;
+import com.gridstorage.nbt.GridItemTags;
 
 public class GUIListener implements Listener {
 
@@ -26,138 +30,129 @@ public class GUIListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onInventoryClick(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player)) {
+        if (!(event.getWhoClicked() instanceof Player player)) {
             return;
         }
 
-        Player player = (Player) event.getWhoClicked();
-        ItemStack clicked = event.getCurrentItem();
-
-        if (guiManager.isGridGUI(event.getInventory())) {
+        Inventory top = event.getView().getTopInventory();
+        if (guiManager.isGridGUI(top)) {
             event.setCancelled(true);
+            ItemStack clicked = event.getCurrentItem();
             if (clicked != null && clicked.hasItemMeta()) {
-                plugin.getPluginLogger().debug("点击了网格GUI，槽位: " + event.getRawSlot());
-                handleGridClick(player, clicked, event.getRawSlot());
+                handleGridClick(player, clicked);
             }
             return;
         }
 
-        if (guiManager.isSlotGUI(event.getInventory())) {
-            boolean isSlotAction = false;
+        StorageSlotHolder holder = guiManager.asSlotHolder(top);
+        if (holder == null) {
+            return;
+        }
 
-            if (event.getRawSlot() < event.getInventory().getSize()) {
-                plugin.getPluginLogger().debug("槽位GUI内部操作: 槽位 " + event.getRawSlot());
-                isSlotAction = true;
-            } else {
-                plugin.getPluginLogger().debug("玩家背包操作: 槽位 " + event.getRawSlot());
-                isSlotAction = true;
-            }
-
-            if (isSlotAction && event.getAction() != org.bukkit.event.inventory.InventoryAction.NOTHING) {
-                final Inventory inv = event.getInventory();
-                plugin.getScheduler().runDelayedAtEntity(player, () -> {
-                    autoSaveSlotContents(player, inv);
-                }, 1L);
-            }
+        if (event.getAction() != org.bukkit.event.inventory.InventoryAction.NOTHING) {
+            plugin.getScheduler().runDelayedAtEntity(player, () -> autoSaveSlotContents(player, top, holder), 1L);
         }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onInventoryDrag(InventoryDragEvent event) {
-        if (!(event.getWhoClicked() instanceof Player)) {
+        if (!(event.getWhoClicked() instanceof Player player)) {
             return;
         }
 
-        Player player = (Player) event.getWhoClicked();
-
-        if (guiManager.isGridGUI(event.getInventory())) {
+        Inventory top = event.getView().getTopInventory();
+        if (guiManager.isGridGUI(top)) {
             event.setCancelled(true);
             return;
         }
 
-        if (guiManager.isSlotGUI(event.getInventory())) {
-            boolean isSlotAction = false;
+        StorageSlotHolder holder = guiManager.asSlotHolder(top);
+        if (holder == null) {
+            return;
+        }
 
-            for (int slot : event.getRawSlots()) {
-                if (slot < event.getInventory().getSize()) {
-                    plugin.getPluginLogger().debug("槽位GUI拖拽操作");
-                    isSlotAction = true;
-                    break;
-                }
+        boolean touchesTop = false;
+        for (int slot : event.getRawSlots()) {
+            if (slot < top.getSize()) {
+                touchesTop = true;
+                break;
             }
-
-            if (isSlotAction) {
-                final Inventory inv = event.getInventory();
-                plugin.getScheduler().runDelayedAtEntity(player, () -> {
-                    autoSaveSlotContents(player, inv);
-                }, 1L);
-            }
+        }
+        if (touchesTop) {
+            plugin.getScheduler().runDelayedAtEntity(player, () -> autoSaveSlotContents(player, top, holder), 1L);
         }
     }
 
-    private void handleGridClick(Player player, ItemStack clicked, int rawSlot) {
-        de.tr7zw.nbtapi.NBTItem nbtItem = new de.tr7zw.nbtapi.NBTItem(clicked);
-        String type = nbtItem.getString("gridstorage_type");
-
-        plugin.getPluginLogger().debug("NBT类型: " + type);
-
+    private void handleGridClick(Player player, ItemStack clicked) {
+        String type = GridItemTags.getType(clicked);
         if (type == null || type.isEmpty()) {
-            plugin.getPluginLogger().debug("NBT类型为空，无法处理点击");
             return;
         }
 
         switch (type) {
-            case "slot":
-                String slotIdStr = nbtItem.getString("gridstorage_slot_id");
-                plugin.getPluginLogger().debug("槽位ID: " + slotIdStr);
-                if (slotIdStr != null && !slotIdStr.isEmpty()) {
-                    try {
-                        int slotId = Integer.parseInt(slotIdStr);
-                        plugin.getPluginLogger().debug("正在打开槽位: " + slotId);
-                        plugin.getStorageManager().openSlot(player, slotId);
-                    } catch (NumberFormatException e) {
-                        player.sendMessage(getPrefix() + plugin.getConfigManager().getMessage("storage.messages.invalid-slot"));
+            case "slot" -> {
+                String slotIdStr = GridItemTags.getSlotId(clicked);
+                if (slotIdStr == null || slotIdStr.isEmpty()) {
+                    return;
+                }
+                try {
+                    int slotId = Integer.parseInt(slotIdStr);
+                    plugin.getStorageManager().openSlot(player, slotId);
+                } catch (NumberFormatException e) {
+                    player.sendMessage(getPrefix()
+                            + plugin.getConfigManager().getMessage("storage.messages.invalid-slot"));
+                }
+            }
+            case "navigation" -> {
+                String action = GridItemTags.getAction(clicked);
+                PlayerStorage storage = plugin.getStorageManager().getCachedStorage(player.getUniqueId());
+                if (storage == null) {
+                    storage = plugin.getStorageManager().getPlayerStorage(player);
+                }
+                if (storage == null || action == null || action.isEmpty()) {
+                    return;
+                }
+                if ("prev".equals(action)) {
+                    if (storage.getCurrentPage() > 0) {
+                        storage.previousPage();
+                        guiManager.updateGridGUI(player, storage);
+                    } else {
+                        player.sendMessage(getPrefix()
+                                + plugin.getConfigManager().getMessage("storage.gui.first-page"));
+                    }
+                } else if ("next".equals(action)) {
+                    if (storage.getCurrentPage() < storage.getMaxPages() - 1) {
+                        storage.nextPage();
+                        guiManager.updateGridGUI(player, storage);
+                    } else {
+                        player.sendMessage(getPrefix()
+                                + plugin.getConfigManager().getMessage("storage.gui.last-page"));
                     }
                 }
-                break;
-
-            case "navigation":
-                String action = nbtItem.getString("gridstorage_action");
-                PlayerStorage storage = plugin.getStorageManager().getPlayerStorage(player);
-
-                plugin.getPluginLogger().debug("导航操作: " + action);
-                plugin.getPluginLogger().debug("当前页: " + (storage != null ? storage.getCurrentPage() : "null") + ", 最大页: " + (storage != null ? storage.getMaxPages() : "null"));
-
-                if (storage != null && action != null && !action.isEmpty()) {
-                    if (action.equals("prev")) {
-                        if (storage.getCurrentPage() > 0) {
-                            storage.previousPage();
-                            guiManager.updateGridGUI(player, storage);
-                        } else {
-                            player.sendMessage(getPrefix() + plugin.getConfigManager().getMessage("storage.gui.first-page"));
-                        }
-                    } else if (action.equals("next")) {
-                        if (storage.getCurrentPage() < storage.getMaxPages() - 1) {
-                            storage.nextPage();
-                            guiManager.updateGridGUI(player, storage);
-                        } else {
-                            player.sendMessage(getPrefix() + plugin.getConfigManager().getMessage("storage.gui.last-page"));
-                        }
-                    }
-                }
-                break;
+            }
+            default -> {
+            }
         }
     }
 
-    private void autoSaveSlotContents(Player player, Inventory inv) {
-        ItemStack[] snapshot = new ItemStack[inv.getSize()];
-        ItemStack[] contents = inv.getContents();
-        for (int i = 0; i < contents.length && i < snapshot.length; i++) {
+    private void autoSaveSlotContents(Player player, Inventory inv, StorageSlotHolder holder) {
+        if (!player.isOnline()) {
+            return;
+        }
+        Inventory top = player.getOpenInventory().getTopInventory();
+        if (!(top.getHolder() instanceof StorageSlotHolder open) || open.getSlotId() != holder.getSlotId()) {
+            return;
+        }
+        ItemStack[] snapshot = cloneContents(inv.getContents());
+        guiManager.saveSlotContentsFromSnapshot(player, snapshot, holder.getSlotId(), true);
+    }
+
+    private static ItemStack[] cloneContents(ItemStack[] contents) {
+        ItemStack[] snapshot = new ItemStack[contents.length];
+        for (int i = 0; i < contents.length; i++) {
             snapshot[i] = contents[i] != null ? contents[i].clone() : null;
         }
-
-        Integer slotId = guiManager.getPlayerSlotId(player);
-        guiManager.saveSlotContentsFromSnapshot(player, snapshot, slotId, true);
+        return snapshot;
     }
 
     private String getPrefix() {
@@ -166,29 +161,25 @@ public class GUIListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onInventoryClose(InventoryCloseEvent event) {
-        if (!(event.getPlayer() instanceof Player)) {
+        if (!(event.getPlayer() instanceof Player player)) {
             return;
         }
 
-        Player player = (Player) event.getPlayer();
         Inventory inv = event.getInventory();
+        StorageSlotHolder slotHolder = guiManager.asSlotHolder(inv);
+        if (slotHolder != null) {
+            plugin.getStorageManager().handleSlotClose(player, slotHolder, inv);
+            return;
+        }
 
-        if (guiManager.isSlotGUI(inv)) {
-            plugin.getPluginLogger().info("槽位GUI 关闭，保存内容");
-
-            ItemStack[] snapshot = new ItemStack[inv.getSize()];
-            ItemStack[] contents = inv.getContents();
-            for (int i = 0; i < contents.length && i < snapshot.length; i++) {
-                snapshot[i] = contents[i] != null ? contents[i].clone() : null;
-            }
-
-            Integer slotId = guiManager.getPlayerSlotId(player);
-            guiManager.saveSlotContentsFromSnapshot(player, snapshot, slotId, true);
-            guiManager.closeSlotGUI(player);
-        } else if (guiManager.isGridGUI(inv)) {
-            plugin.getPluginLogger().debug("网格GUI 关闭，清理状态");
-            guiManager.closeGUI(player);
+        GridGuiHolder gridHolder = guiManager.asGridHolder(inv);
+        if (gridHolder != null) {
             plugin.getStorageManager().closeStorage(player);
         }
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        plugin.getStorageManager().releaseSessionIfIdle(event.getPlayer().getUniqueId());
     }
 }

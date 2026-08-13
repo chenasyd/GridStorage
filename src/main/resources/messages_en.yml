@@ -22,6 +22,9 @@ storage:
     open-slot: "&aOpened storage #{0}"
     slot-saved: "&aStorage #{0} saved"
     all-saved: "&aAll storage data saved"
+    nbtapi-missing: "&cPersonal storage requires the NBTAPI plugin."
+    load-failed: "&cFailed to load storage. Please try again."
+    in-use: "&cStorage is saving. Please try again shortly."
 
 prefix: "&6[Grid Storage] &r"
 

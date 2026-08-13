@@ -1,56 +1,30 @@
 name: GridStorage
-version: 1.0.1
+version: 1.0.2
 main: com.gridstorage.GridStorage
-api-version: '1.21'
+api-version: '1.20'
 authors: [chenasyd]
-description: 一个功能完整的我的世界网格存储插件，支持Spigot和Folia
+description: Personal multi-page grid storage for Spigot/Paper/Folia 1.20+
 website: https://github.com/chenasyd
-softdepend: [PlaceholderAPI, Vault]
-depend: [NBTAPI]
-
-# 支持的最低版本
+softdepend: [NBTAPI]
 load: POSTWORLD
-
-# Folia支持标记
 folia-supported: true
 
 commands:
   gridstorage:
-    description: 网格存储系统主命令 | Grid Storage System Main Command
+    description: Open personal grid storage
     usage: /gridstorage help
-    aliases: [gs, 网格, 存储]
+    aliases: [gs]
     permission: gridstorage.use
   gridstorageadmin:
-    description: 网格存储管理员命令 | Grid Storage Admin Command
+    description: Grid storage admin commands
     usage: /gridstorageadmin help
-    aliases: [gsa, 网格管理, 存储管理]
+    aliases: [gsa]
     permission: gridstorage.admin
 
 permissions:
   gridstorage.use:
-    description: 允许使用网格存储系统
+    description: Allow using personal grid storage
     default: true
   gridstorage.admin:
-    description: 网格存储管理员权限
+    description: Grid storage admin permission
     default: op
-  gridstorage.create:
-    description: 允许创建网格
-    default: true
-  gridstorage.access:
-    description: 允许访问网格
-    default: true
-  gridstorage.delete:
-    description: 允许删除网格
-    default: op
-  gridstorage.invite:
-    description: 允许邀请玩家访问网格
-    default: true
-  gridstorage.kick:
-    description: 允许踢出网格访问者
-    default: true
-  gridstorage.administrate:
-    description: 允许管理网格权限
-    default: op
-  gridstorage.economy:
-    description: 允许管理网格经济
-    default: true
